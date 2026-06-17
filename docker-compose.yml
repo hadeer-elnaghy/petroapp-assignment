@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: petroapp-task-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/vendor
+      - /app/database
+    environment:
+      - TRANSFER_STORAGE_DRIVER=database
