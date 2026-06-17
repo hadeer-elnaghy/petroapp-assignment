@@ -1,0 +1,198 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Station Transfer Ingestion API",
+    "description": "API for ingesting station transfer events safely, idempotently, and retrieving station-specific reconciliation summaries.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/transfers": {
+      "post": {
+        "summary": "Ingest a batch of transfer events",
+        "description": "Accepts a batch of transfer events, processing them idempotently by `event_id`. Duplicate events are ignored during insertion and counted separately.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid payload format or failed validation (Fail-Fast)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations/{station_id}/summary": {
+      "get": {
+        "summary": "Get station reconciliation summary",
+        "description": "Retrieves the total approved transfer amount and the total count of all received events for a specific station.",
+        "parameters": [
+          {
+            "name": "station_id",
+            "in": "path",
+            "required": true,
+            "description": "The unique identifier of the station",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reconciliation summary retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StationSummaryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TransferEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "station_id",
+          "amount",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "description": "Globally unique identifier per event"
+          },
+          "station_id": {
+            "type": "string",
+            "description": "Identifier of the station"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Non-negative decimal transfer amount"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the transfer (e.g. 'approved', 'pending', etc.)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "External event creation timestamp in ISO8601 format"
+          }
+        }
+      },
+      "IngestBatchRequest": {
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/TransferEvent"
+            }
+          }
+        }
+      },
+      "IngestBatchResponse": {
+        "type": "object",
+        "required": [
+          "inserted",
+          "duplicates"
+        ],
+        "properties": {
+          "inserted": {
+            "type": "integer",
+            "description": "Number of new transfer events successfully stored"
+          },
+          "duplicates": {
+            "type": "integer",
+            "description": "Number of duplicate transfer events skipped"
+          }
+        }
+      },
+      "StationSummaryResponse": {
+        "type": "object",
+        "required": [
+          "station_id",
+          "total_approved_amount",
+          "events_count"
+        ],
+        "properties": {
+          "station_id": {
+            "type": "string",
+            "description": "The requested station identifier"
+          },
+          "total_approved_amount": {
+            "type": "number",
+            "description": "The sum of all 'approved' transfer amounts for this station"
+          },
+          "events_count": {
+            "type": "integer",
+            "description": "Count of all stored events for this station across all statuses"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "errors"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "The given data was invalid."
+          },
+          "errors": {
+            "type": "object",
+            "description": "Key-value mapping of field validation failures",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
