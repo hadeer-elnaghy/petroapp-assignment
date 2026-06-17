@@ -66,7 +66,7 @@ You only need Docker and Docker Compose installed.
 
 2. **Run tests inside Docker:**
    ```bash
-   docker compose run --rm app php artisan test
+   docker compose run --rm app test
    ```
 
 ---
@@ -163,6 +163,26 @@ We support two swappable drivers configured via `.env` (`TRANSFER_STORAGE_DRIVER
 
 ### 2. Validation & Error Handling Strategy
 
-* **Fail-Fast for Validation Errors**: If the payload structure is invalid (e.g., fields missing, invalid ISO8601 timestamp, or negative amounts), the validation fails immediately, returning a `400 Bad Request`. **None of the events** in the batch are processed or saved. This protects database consistency from partial invalid shapes.
-* **Partial Accept for Duplicate Events**: If the payload is validation-valid, but contains some events that have already been ingested (either internally duplicated in the array or externally already in the database), we **do not fail the request**. Instead, we accept the unique ones, ignore the duplicates, and return a summary payload indicating the `inserted` and `duplicates` counts.
+As allowed by the specification, we have documented and implemented the following behaviors:
+
+* **Validation Rules:**
+  * `event_id`, `station_id`, `status`, and `created_at` are strictly required.
+  * `amount` must be a non-negative number (greater than or equal to `0`).
+  * `created_at` must be parseable as a valid ISO8601 datetime format.
+* **Error Handling Choice - "Fail-Fast":**
+  * If the payload shape is invalid or fails any validation rules, the API returns a `400 Bad Request` with a helpful validation error message.
+  * We chose the **"Fail-Fast"** approach: the **entire batch is rejected**, and no events from that payload are saved or committed to storage. This prevents half-written or partially corrupt data shapes in the database/in-memory cache.
+* **Duplicate Events - Partial Accept:**
+  * If the payload is validation-valid, but contains some events that have already been ingested (either internally duplicated in the array or externally already in the database), we **do not fail the request**. Instead, we accept the unique ones, ignore the duplicates, and return a summary payload indicating the `inserted` and `duplicates` counts.
+
+---
+
+### 3. Station Summary & Reconciliation Rules
+
+* **Events Count Choice - "All Statuses":**
+  * We chose the **"All Statuses"** approach: `events_count` returns the count of **all** stored events for that station, regardless of whether their status is `approved`, `pending`, or any other value.
+* **Amount Summing - "Approved Only":**
+  * The `total_approved_amount` is calculated by summing the amounts of **approved** events only.
+* **Handling of Unknown Statuses:**
+  * Unknown/custom statuses are allowed to be ingested. However, they are treated as non-approved, meaning they count toward the total `events_count` but do not contribute to the `total_approved_amount` sum.
 
